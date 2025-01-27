@@ -1,0 +1,14 @@
+#+TITLE: live-server
+#+AUTHOR: laluxx
+
+* Install
+Clone it
+#+begin_src shell
+git clone https://github.com/laluxx/live-server ~/.config/emacs/lisp/live-server
+#+end_src
+
+Add to init.el
+#+begin_src elisp
+(use-package live-server
+  :load-path "~/.config/emacs/lisp/live-server")
+#+end_src
