@@ -10,13 +10,16 @@
 
 ;;; Commentary:
 
-;; TODO xdg-open the default browser with the page automatically
-;; TODO Remember the buffer where `live-server-start' was called
-;; and call `live-server-stop' when we kill it (in any way)
+;; FIXME Open the url ony one time
+;; TODO Place the icon right after the mode section
+;; in the modeline. And add a space, it should be: "󰘊 "
 
 ;; This package provides integration with live-server, allowing you to
 ;; start a live development server from the current buffer path.
 ;; The server will automatically cold reload connected browsers on files change.
+
+;; NOTE This package remembers the buffer where `live-server-start' was called
+;; and call `live-server-stop' when you kill it (in any way)
 
 ;;; Code:
 
@@ -45,8 +48,16 @@ Inherits from the 'success' face by default."
                  (color :tag "Custom color"))
   :group 'live-server)
 
+(defcustom live-server-open-in-new-window t
+  "Whether to open the live-server URL in a new browser window."
+  :type 'boolean
+  :group 'live-server)
+
 (defvar live-server--process nil
   "Hold the live-server process object.")
+
+(defvar live-server--buffer nil
+  "Buffer where live-server was started.")
 
 (defun live-server--get-buffer-directory ()
   "Get the directory of the current buffer."
@@ -77,9 +88,14 @@ Inherits from the 'success' face by default."
              :sentinel (lambda (proc event)
                          (when (memq (process-status proc) '(exit signal))
                            (setq live-server--process nil)
+                           (setq live-server--buffer nil)
                            (live-server--update-modeline)))))
+      (setq live-server--buffer (current-buffer))
       (live-server--update-modeline)
-      (message "Started live-server"))))
+      (message "Started live-server")
+      (if live-server-open-in-new-window
+          (start-process "firefox" nil "firefox" "--new-window" "--kiosk" "http://localhost:8080")
+        (browse-url "http://localhost:8080")))))
 
 (defun live-server-stop ()
   "Stop the running live-server process."
@@ -87,24 +103,36 @@ Inherits from the 'success' face by default."
   (when live-server--process
     (delete-process live-server--process)
     (setq live-server--process nil)
+    (setq live-server--buffer nil)
     (live-server--update-modeline)
     (message "Stopped live-server")))
 
 (defun live-server--update-modeline ()
   "Update the modeline to reflect the current live-server status."
   (if live-server--process
-      (add-to-list 'global-mode-string
-                   '(:eval (propertize live-server-modeline-icon
-                                       'face `(:foreground ,live-server-icon-color :height 0.9)
-                                       'help-echo "live-server active"
-                                       'display '(raise -0.1))))
-    (setq global-mode-string
-          (delete '(:eval (propertize live-server-modeline-icon
-                                      'face `(:foreground ,live-server-icon-color :height 0.9)
-                                      'help-echo "live-server active"
-                                      'display '(raise -0.1)))
-                  global-mode-string)))
+      (add-to-list 'mode-line-format
+                   '(:eval (when (eq (current-buffer) live-server--buffer)
+                             (propertize live-server-modeline-icon
+                                         'face `(:foreground ,live-server-icon-color :height 0.9)
+                                         'help-echo "live-server active"
+                                         'display '(raise -0.1)))); ?
+                   t)
+    (setq mode-line-format
+          (remove '(:eval (when (eq (current-buffer) live-server--buffer)
+                            (propertize live-server-modeline-icon
+                                        'face `(:foreground ,live-server-icon-color :height 0.9)
+                                        'help-echo "live-server active"
+                                        'display '(raise -0.1)))); ?
+                  mode-line-format)))
   (force-mode-line-update t))
+
+(defun live-server--kill-buffer-hook ()
+  "Hook to stop live-server when the buffer it was started from is killed."
+  (when (and live-server--process
+             (eq (current-buffer) live-server--buffer))
+    (live-server-stop)))
+
+(add-hook 'kill-buffer-hook #'live-server--kill-buffer-hook)
 
 ;;;###autoload
 (define-minor-mode live-server-mode
